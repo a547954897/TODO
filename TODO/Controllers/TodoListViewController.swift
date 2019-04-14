@@ -7,10 +7,16 @@
 //
 
 import UIKit
+import CoreData
 
 class TodoListViewController: UITableViewController {
     
- //   let defaults = UserDefaults.standard
+    
+    
+    
+    
+    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+//   let defaults = UserDefaults.standard
  //   var itemArray = ["购买水杯","吃药","修改密码","a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"]
     
     
@@ -19,13 +25,12 @@ class TodoListViewController: UITableViewController {
     let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Items.plist")
     
     func saveItems(){
-        let encoder = PropertyListEncoder()
         do{
-            let data = try encoder.encode(itemArray)
-            try data.write(to: dataFilePath!)
+            try context.save()
         }catch{
-            print("编码错误:\(error)")
+            print("保存context错误：\(error)")
         }
+        tableView.reloadData()
     }
     
     
@@ -35,20 +40,14 @@ class TodoListViewController: UITableViewController {
         let alert = UIAlertController(title: "添加一个新的ToDo项目", message: "", preferredStyle: .alert)
         
         let action = UIAlertAction(title: "添加项目", style: .default){(action) in
-            let newItem = Item();
+          //  let newItem = Item();
+            let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+            let newItem = Item(context: context)
             newItem.title = textField.text!
+            newItem.done = false  //让done属性的默认值为falsed
             self.itemArray.append(newItem)
             
-            let encoder = PropertyListEncoder()
-            
-            do {
-                let data = try encoder.encode(self.itemArray)
-                try data.write(to: self.dataFilePath!)
-            }catch{
-                print("编码错误：\(error)")
-            }
-            //self.defaults.set(self.itemArray, forKey: "ToDoListArray")
-            self.tableView.reloadData()
+            self.saveItems()
             
         }
         
@@ -61,6 +60,8 @@ class TodoListViewController: UITableViewController {
         present(alert, animated: true, completion: nil)
     }
     
+    
+
     
   
     
@@ -82,13 +83,11 @@ class TodoListViewController: UITableViewController {
     }
     
     func loadItems(){
-        if let data = try? Data(contentsOf: dataFilePath!){
-            let decoder = PropertyListDecoder()
-            do {
-                itemArray = try decoder.decode([Item].self, from: data)
-            }catch {
-                print("解码item错误！")
-            }
+        let request:NSFetchRequest<Item> = Item.fetchRequest()
+        do {
+            itemArray = try context.fetch(request)
+        } catch {
+            print("从context获取数据错误\(error)")
         }
     }
     
@@ -100,14 +99,9 @@ class TodoListViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         print(itemArray[indexPath.row])
-        
-        tableView.deselectRow(at: indexPath, animated: true)
-        
-        if itemArray[indexPath.row].done == false {
-            itemArray[indexPath.row].done = true
-        }else{
-            itemArray[indexPath.row].done = false
-        }
+        itemArray[indexPath.row].done = !itemArray[indexPath.row].done
+        let title = itemArray[indexPath.row].title!
+        itemArray[indexPath.row].setValue(title, forKey: "title")
         saveItems()
         
         tableView.beginUpdates()
@@ -136,3 +130,23 @@ class TodoListViewController: UITableViewController {
 
 }
 
+extension TodoListViewController:
+UISearchBarDelegate{
+    func searchBarSearchButtonClicked(_ searchBar:UISearchBar) {
+        let request: NSFetchRequest<Item> = Item.fetchRequest()
+        let predicate = NSPredicate(format: "title CONTAINS[c] %@",searchBar.text!)
+        request.predicate = predicate
+        
+        let sortDescriptor = NSSortDescriptor(key: "title", ascending: true)
+        request.sortDescriptors = [sortDescriptor]
+        
+        do {
+            itemArray = try context.fetch(request)
+        } catch {
+            print("从context攻取数据:\(error)")
+        }
+        tableView.reloadData()
+        
+        
+    }
+}
